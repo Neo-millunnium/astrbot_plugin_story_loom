@@ -113,7 +113,19 @@ async function renderDashboard(container) {
 }
 
 // ===== 关系图谱 =====
+async function loadVisNetwork() {
+  if (typeof vis !== "undefined") return true;
+  return new Promise((resolve) => {
+    const s = document.createElement("script");
+    s.src = "https://unpkg.com/vis-network/standalone/umd/vis-network.min.js";
+    s.onload = () => resolve(true);
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
+
 async function renderGraph(container) {
+  const visLoaded = await loadVisNetwork();
   container.innerHTML = `
     <div class="page-header">
       <h2>🕸️ 关系图谱</h2>
@@ -121,9 +133,17 @@ async function renderGraph(container) {
     </div>
     <div id="vis-network" class="graph-container"></div>
   `;
+  if (!visLoaded) {
+    document.getElementById("vis-network").innerHTML = '<div class="empty-state" style="padding:60px 20px"><div class="icon">🕸️</div><p>图谱库加载失败，刷新重试或检查网络</p></div>';
+    return;
+  }
   const gdata = await apiGet(`${API_BASE}/graph`);
   if (!gdata.ok || !gdata.data) {
-    container.innerHTML += '<p style="color:#64748b; padding:20px">暂无元素</p>';
+    if (!visLoaded) {
+    container.innerHTML += `<div class="empty-state"><div class="icon">🕸️</div><p>图谱库加载失败，请刷新重试或检查网络</p></div>`;
+    return;
+  }
+  container.innerHTML += color:#64748b; padding:20px">暂无元素</p>';
     return;
   }
   const {nodes, edges} = gdata.data;
