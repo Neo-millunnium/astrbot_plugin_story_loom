@@ -1,22 +1,27 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
+<html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>故事织机 - 世界观管理</title>
 <link rel="stylesheet" href="style.css">
+<!-- Vis.js 网络图 -->
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 </head>
 <body>
 <div id="app">
-  <!-- 左侧导航栏 -->
+  <!-- 侧边栏 -->
   <nav id="sidebar">
     <div class="sidebar-header">
       <h1>🧵 故事织机</h1>
-      <p class="subtitle">世界观管理 & 灵感收集</p>
+      <p class="subtitle">世界观图谱与灵感收集</p>
     </div>
     <ul class="nav-list">
       <li class="nav-item active" data-page="dashboard">
         <span class="nav-icon">📊</span> 总览
+      </li>
+      <li class="nav-item" data-page="graph">
+        <span class="nav-icon">🕸️</span> 关系图谱
       </li>
       <li class="nav-item" data-page="characters">
         <span class="nav-icon">🎭</span> 角色
@@ -42,7 +47,7 @@
     </ul>
     <div class="sidebar-footer">
       <div class="search-box">
-        <input type="text" id="globalSearch" placeholder="搜索所有内容..." />
+        <input type="text" id="globalSearch" placeholder="搜索所有元素..." />
         <button onclick="doGlobalSearch()">🔍</button>
       </div>
     </div>

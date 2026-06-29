@@ -1,272 +1,231 @@
 """
-存储层 - 使用 JSON 文件存储所有世界观和灵感数据
-数据文件位置: data/plugin_data/astrbot_plugin_story_loom/story_loom_data.json
+故事织机 - 数据存储与关系图谱
+支持网状关系：角色-地点-物品-事件-势力-设定
 """
 import json
 import os
 import uuid
+from datetime import datetime
 from typing import Optional
+from dataclasses import dataclass, asdict
+from collections import defaultdict
 
-from .models import (
-    Character, Location, Item, Faction, TimelineEvent,
-    SettingEntry, Inspiration, now_iso, model_to_dict, dict_to_model
-)
+STORAGE_DIR = "/root/AstrBot/data/story_loom"
+os.makedirs(STORAGE_DIR, exist_ok=True)
 
+@dataclass
+class Node:
+    id: str
+    type: str  # character, location, item, faction, event, setting, inspiration
+    name: str
+    data: dict
+    created_at: str
+    updated_at: str
+
+@dataclass
+class Edge:
+    id: str
+    source: str
+    target: str
+    type: str  # 关系类型
+    weight: float = 1.0
+    data: dict = None
 
 class StoryLoomStorage:
-    """故事织机数据存储类"""
+    def __init__(self):
+        self.nodes_file = os.path.join(STORAGE_DIR, "nodes.json")
+        self.edges_file = os.path.join(STORAGE_DIR, "edges.json")
+        self._load()
 
-    def __init__(self, data_dir: str = None):
-        """
-        初始化存储
-        :param data_dir: 数据存储目录，默认 AstrBot 插件数据目录
-        """
-        if data_dir is None:
-            # 默认路径：AstrBot 插件数据目录
-            base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                               "data", "plugin_data", "astrbot_plugin_story_loom")
-            data_dir = base
-        self.data_dir = data_dir
-        self.data_file = os.path.join(data_dir, "story_loom_data.json")
-        self._ensure_dir_exists()
-        self._init_data_file()
+    def _load(self):
+        if os.path.exists(self.nodes_file):
+            with open(self.nodes_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.nodes = {nid: Node(**n) for nid, n in data.items()}
+        else:
+            self.nodes = {}
+        if os.path.exists(self.edges_file):
+            with open(self.edges_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.edges = {eid: Edge(**e) for eid, e in data.items()}
+        else:
+            self.edges = {}
+        self._save()
 
-    def _ensure_dir_exists(self):
-        """确保数据目录存在"""
-        os.makedirs(self.data_dir, exist_ok=True)
+    def _save(self):
+        with open(self.nodes_file, 'w', encoding='utf-8') as f:
+            json.dump({nid: asdict(n) for nid, n in self.nodes.items()}, f, ensure_ascii=False, indent=2)
+        with open(self.edges_file, 'w', encoding='utf-8') as f:
+            json.dump({eid: asdict(e) for eid, e in self.edges.items()}, f, ensure_ascii=False, indent=2)
 
-    def _init_data_file(self):
-        """如果数据文件不存在，创建空数据文件"""
-        if not os.path.exists(self.data_file):
-            self._save_raw({
-                "characters": {},
-                "locations": {},
-                "items": {},
-                "factions": {},
-                "timeline": {},
-                "settings": {},
-                "inspirations": {}
+    # ===== 节点 CRUD =====
+    def _list_all(self, node_type: str) -> dict:
+        return {nid: n.data for nid, n in self.nodes.items() if n.type == node_type}
+
+    def _get_one(self, node_type: str, node_id: str) -> Optional[dict]:
+        n = self.nodes.get(node_id)
+        if n and n.type == node_type:
+            return n.data
+        return None
+
+    def save_node(self, node_type: str, data: dict, node_id: str = None) -> str:
+        now = datetime.now().isoformat()
+        if node_id and node_id in self.nodes:
+            # 更新
+            n = self.nodes[node_id]
+            n.data.update(data)
+            n.updated_at = now
+        else:
+            # 新增
+            node_id = node_id or str(uuid.uuid4())[:8]
+            self.nodes[node_id] = Node(
+                id=node_id,
+                type=node_type,
+                name=data.get('name') or data.get('title') or '未命名',
+                data=data,
+                created_at=now,
+                updated_at=now
+            )
+        self._save()
+        return node_id
+
+    def delete_node(self, node_id: str) -> bool:
+        if node_id not in self.nodes:
+            return False
+        del self.nodes[node_id]
+        # 删除相关边
+        self.edges = {eid: e for eid, e in self.edges.items() if e.source != node_id and e.target != node_id}
+        self._save()
+        return True
+
+    # ===== 边（关系）操作 =====
+    def add_edge(self, source: str, target: str, edge_type: str, weight: float = 1.0, data: dict = None) -> str:
+        """添加两个节点之间的关系"""
+        if source not in self.nodes or target not in self.nodes:
+            return ""
+        edge_id = f"{source}-{target}-{edge_type}"
+        self.edges[edge_id] = Edge(
+            id=edge_id,
+            source=source,
+            target=target,
+            type=edge_type,
+            weight=weight,
+            data=data or {}
+        )
+        self._save()
+        return edge_id
+
+    def remove_edge(self, edge_id: str) -> bool:
+        if edge_id not in self.edges:
+            return False
+        del self.edges[edge_id]
+        self._save()
+        return True
+
+    def get_edges(self, node_id: str = None) -> dict:
+        """获取节点相关的边"""
+        if node_id:
+            return {eid: asdict(e) for eid, e in self.edges.items() if e.source == node_id or e.target == node_id}
+        return {eid: asdict(e) for eid, e in self.edges.items()}
+
+    def get_graph(self, node_types: list[str] = None) -> dict:
+        """获取完整图谱数据"""
+        nodes = []
+        edges = []
+        for nid, n in self.nodes.items():
+            if node_types and n.type not in node_types:
+                continue
+            nodes.append({
+                "id": nid,
+                "label": n.name,
+                "type": n.type,
+                "data": n.data
             })
+        for eid, e in self.edges.items():
+            if e.source in self.nodes and e.target in self.nodes:
+                edges.append({
+                    "id": eid,
+                    "from": e.source,
+                    "to": e.target,
+                    "label": e.type,
+                    "value": e.weight,
+                    "data": e.data or {}
+                })
+        return {"nodes": nodes, "edges": edges}
 
-    def _load_raw(self) -> dict:
-        """加载原始 JSON 数据"""
-        try:
-            with open(self.data_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except (json.JSONDecodeError, FileNotFoundError):
-            return {}
-
-    def _save_raw(self, data: dict):
-        """保存原始 JSON 数据"""
-        with open(self.data_file, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-
-    # ==================== 通用 CRUD ====================
-
-    def _list_all(self, collection_key: str) -> dict:
-        """获取指定集合的所有条目"""
-        data = self._load_raw()
-        return data.get(collection_key, {})
-
-    def _get_one(self, collection_key: str, item_id: str) -> Optional[dict]:
-        """获取指定集合中的单个条目"""
-        data = self._load_raw()
-        return data.get(collection_key, {}).get(item_id)
-
-    def _save_one(self, collection_key: str, item_id: str, item_dict: dict):
-        """保存单个条目到指定集合"""
-        data = self._load_raw()
-        if collection_key not in data:
-            data[collection_key] = {}
-        data[collection_key][item_id] = item_dict
-        self._save_raw(data)
-
-    def _delete_one(self, collection_key: str, item_id: str) -> bool:
-        """从指定集合删除单个条目"""
-        data = self._load_raw()
-        if collection_key in data and item_id in data[collection_key]:
-            del data[collection_key][item_id]
-            self._save_raw(data)
-            return True
-        return False
-
-    def _generate_id(self) -> str:
-        """生成唯一 ID"""
-        return uuid.uuid4().hex[:12]
-
-    # ==================== 角色管理 ====================
-
-    def list_characters(self) -> dict:
-        """获取所有角色"""
-        return self._list_all("characters")
-
-    def get_character(self, char_id: str) -> Optional[dict]:
-        """获取单个角色"""
-        return self._get_one("characters", char_id)
-
+    # ===== 快捷方法 =====
     def save_character(self, data: dict, char_id: str = None) -> str:
-        """保存角色，返回 ID"""
-        if char_id is None:
-            char_id = self._generate_id()
-            data["id"] = char_id
-            data["created_at"] = now_iso()
-        data["updated_at"] = now_iso()
-        self._save_one("characters", char_id, data)
-        return char_id
+        return self.save_node("character", data, char_id)
 
     def delete_character(self, char_id: str) -> bool:
-        """删除角色"""
-        return self._delete_one("characters", char_id)
-
-    # ==================== 地点管理 ====================
-
-    def list_locations(self) -> dict:
-        return self._list_all("locations")
-
-    def get_location(self, loc_id: str) -> Optional[dict]:
-        return self._get_one("locations", loc_id)
+        return self.delete_node(char_id)
 
     def save_location(self, data: dict, loc_id: str = None) -> str:
-        if loc_id is None:
-            loc_id = self._generate_id()
-            data["id"] = loc_id
-            data["created_at"] = now_iso()
-        data["updated_at"] = now_iso()
-        self._save_one("locations", loc_id, data)
-        return loc_id
+        return self.save_node("location", data, loc_id)
 
     def delete_location(self, loc_id: str) -> bool:
-        return self._delete_one("locations", loc_id)
-
-    # ==================== 物品管理 ====================
-
-    def list_items(self) -> dict:
-        return self._list_all("items")
-
-    def get_item(self, item_id: str) -> Optional[dict]:
-        return self._get_one("items", item_id)
+        return self.delete_node(loc_id)
 
     def save_item(self, data: dict, item_id: str = None) -> str:
-        if item_id is None:
-            item_id = self._generate_id()
-            data["id"] = item_id
-            data["created_at"] = now_iso()
-        data["updated_at"] = now_iso()
-        self._save_one("items", item_id, data)
-        return item_id
+        return self.save_node("item", data, item_id)
 
     def delete_item(self, item_id: str) -> bool:
-        return self._delete_one("items", item_id)
-
-    # ==================== 势力管理 ====================
-
-    def list_factions(self) -> dict:
-        return self._list_all("factions")
-
-    def get_faction(self, faction_id: str) -> Optional[dict]:
-        return self._get_one("factions", faction_id)
+        return self.delete_node(item_id)
 
     def save_faction(self, data: dict, faction_id: str = None) -> str:
-        if faction_id is None:
-            faction_id = self._generate_id()
-            data["id"] = faction_id
-            data["created_at"] = now_iso()
-        data["updated_at"] = now_iso()
-        self._save_one("factions", faction_id, data)
-        return faction_id
+        return self.save_node("faction", data, faction_id)
 
     def delete_faction(self, faction_id: str) -> bool:
-        return self._delete_one("factions", faction_id)
-
-    # ==================== 时间线管理 ====================
-
-    def list_timeline(self) -> dict:
-        return self._list_all("timeline")
-
-    def get_timeline_event(self, event_id: str) -> Optional[dict]:
-        return self._get_one("timeline", event_id)
+        return self.delete_node(faction_id)
 
     def save_timeline_event(self, data: dict, event_id: str = None) -> str:
-        if event_id is None:
-            event_id = self._generate_id()
-            data["id"] = event_id
-            data["created_at"] = now_iso()
-        data["updated_at"] = now_iso()
-        self._save_one("timeline", event_id, data)
-        return event_id
+        return self.save_node("event", data, event_id)
 
     def delete_timeline_event(self, event_id: str) -> bool:
-        return self._delete_one("timeline", event_id)
-
-    # ==================== 设定管理 ====================
-
-    def list_settings(self) -> dict:
-        return self._list_all("settings")
-
-    def get_setting(self, setting_id: str) -> Optional[dict]:
-        return self._get_one("settings", setting_id)
+        return self.delete_node(event_id)
 
     def save_setting(self, data: dict, setting_id: str = None) -> str:
-        if setting_id is None:
-            setting_id = self._generate_id()
-            data["id"] = setting_id
-            data["created_at"] = now_iso()
-        data["updated_at"] = now_iso()
-        self._save_one("settings", setting_id, data)
-        return setting_id
+        return self.save_node("setting", data, setting_id)
 
     def delete_setting(self, setting_id: str) -> bool:
-        return self._delete_one("settings", setting_id)
-
-    # ==================== 灵感管理 ====================
-
-    def list_inspirations(self) -> dict:
-        return self._list_all("inspirations")
-
-    def get_inspiration(self, insp_id: str) -> Optional[dict]:
-        return self._get_one("inspirations", insp_id)
+        return self.delete_node(setting_id)
 
     def save_inspiration(self, data: dict, insp_id: str = None) -> str:
-        if insp_id is None:
-            insp_id = self._generate_id()
-            data["id"] = insp_id
-            data["created_at"] = now_iso()
-        data["updated_at"] = now_iso()
-        self._save_one("inspirations", insp_id, data)
-        return insp_id
+        return self.save_node("inspiration", data, insp_id)
 
     def delete_inspiration(self, insp_id: str) -> bool:
-        return self._delete_one("inspirations", insp_id)
+        return self.delete_node(insp_id)
 
-    # ==================== 搜索 ====================
+    # ===== 列表方法（兼容旧版） =====
+    def list_characters(self) -> dict:
+        return self._list_all("character")
 
+    def list_locations(self) -> dict:
+        return self._list_all("location")
+
+    def list_items(self) -> dict:
+        return self._list_all("item")
+
+    def list_factions(self) -> dict:
+        return self._list_all("faction")
+
+    def list_timeline(self) -> dict:
+        return self._list_all("event")
+
+    def list_settings(self) -> dict:
+        return self._list_all("setting")
+
+    def list_inspirations(self) -> dict:
+        return self._list_all("inspiration")
+
+    # ===== 搜索 =====
     def search(self, keyword: str) -> dict:
-        """
-        在所有集合中搜索关键词
-        返回按集合分组的搜索结果
-        """
-        keyword = keyword.lower()
-        results = {}
-
-        collections = {
-            "characters": ["name", "aliases", "personality", "background"],
-            "locations": ["name", "description", "type"],
-            "items": ["name", "description", "type", "lore"],
-            "factions": ["name", "description", "goals"],
-            "timeline": ["name", "description", "time_point"],
-            "settings": ["title", "content", "category"],
-            "inspirations": ["title", "content", "tags"],
-        }
-
-        for coll_name, fields in collections.items():
-            items = self._list_all(coll_name)
-            matched = {}
-            for item_id, item in items.items():
-                for field in fields:
-                    if keyword in str(item.get(field, "")).lower():
-                        matched[item_id] = item
-                        break
-            if matched:
-                results[coll_name] = matched
-
-        return results
+        results = defaultdict(dict)
+        kw = keyword.lower()
+        for nid, n in self.nodes.items():
+            # 搜索名称和描述
+            name = n.name.lower()
+            data_str = json.dumps(n.data, ensure_ascii=False).lower()
+            if kw in name or kw in data_str:
+                results[n.type + "s"][nid] = n.data
+        return dict(results)
