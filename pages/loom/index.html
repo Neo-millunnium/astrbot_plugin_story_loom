@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>故事织机 - 世界观管理</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <!-- 左侧导航栏 -->
+  <nav id="sidebar">
+    <div class="sidebar-header">
+      <h1>🧵 故事织机</h1>
+      <p class="subtitle">世界观管理 & 灵感收集</p>
+    </div>
+    <ul class="nav-list">
+      <li class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">📊</span> 总览
+      </li>
+      <li class="nav-item" data-page="characters">
+        <span class="nav-icon">🎭</span> 角色
+      </li>
+      <li class="nav-item" data-page="locations">
+        <span class="nav-icon">📍</span> 地点
+      </li>
+      <li class="nav-item" data-page="items">
+        <span class="nav-icon">⚔️</span> 物品
+      </li>
+      <li class="nav-item" data-page="factions">
+        <span class="nav-icon">🏰</span> 势力
+      </li>
+      <li class="nav-item" data-page="timeline">
+        <span class="nav-icon">📅</span> 时间线
+      </li>
+      <li class="nav-item" data-page="settings">
+        <span class="nav-icon">📖</span> 设定
+      </li>
+      <li class="nav-item" data-page="inspirations">
+        <span class="nav-icon">💡</span> 灵感
+      </li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="search-box">
+        <input type="text" id="globalSearch" placeholder="搜索所有内容..." />
+        <button onclick="doGlobalSearch()">🔍</button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 主内容区 -->
+  <main id="content">
+    <div id="page-content"></div>
+  </main>
+</div>
+
+<!-- 编辑弹窗 -->
+<div id="modal" class="modal hidden">
+  <div class="modal-backdrop" onclick="closeModal()"></div>
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="modalTitle">编辑</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn btn-danger" id="deleteBtn" onclick="deleteCurrentItem()" style="display:none">删除</button>
+      <button class="btn btn-primary" onclick="saveModal()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
