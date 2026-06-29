@@ -117,7 +117,7 @@ async function loadVisNetwork() {
   if (typeof vis !== "undefined") return true;
   return new Promise((resolve) => {
     const s = document.createElement("script");
-    s.src = "https://unpkg.com/vis-network/standalone/umd/vis-network.min.js";
+    s.src = "vis-network.min.js";
     s.onload = () => resolve(true);
     s.onerror = () => resolve(false);
     document.head.appendChild(s);
