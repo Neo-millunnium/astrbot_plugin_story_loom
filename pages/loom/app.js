@@ -69,7 +69,11 @@ async function navigateTo(page) {
 // ===== API 调用 =====
 async function apiGet(url) {
   try {
-    const r = await fetch(url, {credentials: "include"});
+    // 从 URL 查询参数获取 asset_token（iframe 加载时由父窗口注入）
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("asset_token") || "";
+    const sep = url.includes("?") ? "&" : "?";
+    const r = await fetch(url + sep + "asset_token=" + encodeURIComponent(token));
     const data = await r.json();
     return data;
   } catch(e) {
@@ -79,7 +83,14 @@ async function apiGet(url) {
 }
 async function apiPost(url, data) {
   try {
-    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data), credentials: "include" });
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("asset_token") || "";
+    const sep = url.includes("?") ? "&" : "?";
+    const r = await fetch(url + sep + "asset_token=" + encodeURIComponent(token), {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(data)
+    });
     return await r.json();
   } catch(e) {
     console.error("API POST error:", url, e);
@@ -153,11 +164,7 @@ async function renderGraph(container) {
   }
   const gdata = await apiGet(`${API_BASE}/graph`);
   if (!gdata.ok || !gdata.data) {
-    if (!visLoaded) {
-    container.innerHTML += `<div class="empty-state"><div class="icon">🕸️</div><p>图谱库加载失败，请刷新重试或检查网络</p></div>`;
-    return;
-  }
-  container.innerHTML += color:#64748b; padding:20px">暂无元素</p>';
+    container.innerHTML += '<p style="color:#64748b; padding:20px">暂无元素</p>';
     return;
   }
   const {nodes, edges} = gdata.data;
