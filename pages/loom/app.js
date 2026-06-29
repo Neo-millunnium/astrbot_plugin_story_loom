@@ -67,10 +67,24 @@ async function navigateTo(page) {
 }
 
 // ===== API 调用 =====
-async function apiGet(url) { const r = await fetch(url); return r.json(); }
+async function apiGet(url) {
+  try {
+    const r = await fetch(url, {credentials: "include"});
+    const data = await r.json();
+    return data;
+  } catch(e) {
+    console.error("API GET error:", url, e);
+    return {ok: false, data: null};
+  }
+}
 async function apiPost(url, data) {
-  const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) });
-  return r.json();
+  try {
+    const r = await fetch(url, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data), credentials: "include" });
+    return await r.json();
+  } catch(e) {
+    console.error("API POST error:", url, e);
+    return {ok: false};
+  }
 }
 
 // ===== 总览页面 =====
@@ -79,7 +93,7 @@ async function renderDashboard(container) {
   const types = Object.keys(TYPES);
   let stats = {};
   for (const t of types) {
-    const r = await apiGet(`${API_BASE}/${t}s`);
+    let r = {data: null}; try { r = await apiGet(`${API_BASE}/${t}s`); } catch(e) {}
     stats[t] = r.data ? Object.keys(r.data).length : 0;
   }
   let total = Object.values(stats).reduce((a,b)=>a+b,0);
@@ -96,7 +110,7 @@ async function renderDashboard(container) {
   html += '</div>';
 
   // 最近灵感
-  const ir = await apiGet(`${API_BASE}/inspirations`);
+  let ir = {data: null}; try { ir = await apiGet(`${API_BASE}/inspirations`); } catch(e) {}
   const sorted = Object.entries(ir.data||{}).sort((a,b)=>(b[1].updated_at||b[1].created_at||'').localeCompare(a[1].updated_at||a[1].created_at||'')).slice(0,5);
   if (sorted.length) {
     html += '<h3 style="margin:24px 0 12px">💡 最近的灵感</h3><div class="inspiration-board">';
