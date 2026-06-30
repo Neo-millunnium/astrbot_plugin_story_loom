@@ -73,7 +73,9 @@ async function apiGet(url) {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("asset_token") || "";
     const sep = url.includes("?") ? "&" : "?";
-    const r = await fetch(url + sep + "asset_token=" + encodeURIComponent(token));
+    const r = await fetch(url + sep + "asset_token=" + encodeURIComponent(token), {
+      credentials: "include"
+    });
     const data = await r.json();
     return data;
   } catch(e) {
@@ -89,7 +91,8 @@ async function apiPost(url, data) {
     const r = await fetch(url + sep + "asset_token=" + encodeURIComponent(token), {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(data)
+      body:JSON.stringify(data),
+      credentials: "include"
     });
     return await r.json();
   } catch(e) {
