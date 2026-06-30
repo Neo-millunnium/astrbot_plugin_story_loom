@@ -1,9 +1,12 @@
 /**
  * 故事织机 - 前端 JavaScript
+ * 通过 AstrBot Plugin Page bridge SDK 与后端通信，无 CORS/认证问题
  */
 
 // ===== API 基础路径 =====
-const API_BASE = "/api/plug/story_loom/api";
+// bridge SDK 自动拼接为 /api/plug/{plugin_name}/{endpoint}
+// 所以这里只需要 API 路径的后半段
+const API_PATH = "api";
 
 // ===== 页面配置 =====
 const TYPES = {
@@ -66,38 +69,29 @@ async function navigateTo(page) {
   else await renderListPage(c, page);
 }
 
-// ===== API 调用 =====
-async function apiGet(url) {
+// ===== API 调用（通过 bridge SDK，无 CORS 问题）=====
+function bp() { return window.AstrBotPluginPage; }
+
+async function apiGet(path, params = {}) {
   try {
-    // 从 URL 查询参数获取 asset_token（iframe 加载时由父窗口注入）
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("asset_token") || "";
-    const sep = url.includes("?") ? "&" : "?";
-    const r = await fetch(url + sep + "asset_token=" + encodeURIComponent(token), {
-      credentials: "include"
-    });
-    const data = await r.json();
-    return data;
+    const data = await bp().apiGet(`${API_PATH}/${path}`, params);
+    // bridge 对成功返回纯数据，对失败返回 {ok:false,error:...}
+    if (data && typeof data === 'object' && data.ok === false) return data;
+    return { ok: true, data: data };
   } catch(e) {
-    console.error("API GET error:", url, e);
-    return {ok: false, data: null};
+    console.error("API GET error:", path, e);
+    return { ok: false, data: null };
   }
 }
-async function apiPost(url, data) {
+
+async function apiPost(path, body) {
   try {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("asset_token") || "";
-    const sep = url.includes("?") ? "&" : "?";
-    const r = await fetch(url + sep + "asset_token=" + encodeURIComponent(token), {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(data),
-      credentials: "include"
-    });
-    return await r.json();
+    const data = await bp().apiPost(`${API_PATH}/${path}`, body);
+    if (data && typeof data === 'object' && data.ok === false) return data;
+    return { ok: true, ...data };
   } catch(e) {
-    console.error("API POST error:", url, e);
-    return {ok: false};
+    console.error("API POST error:", path, e);
+    return { ok: false };
   }
 }
 
@@ -107,7 +101,7 @@ async function renderDashboard(container) {
   const types = Object.keys(TYPES);
   let stats = {};
   for (const t of types) {
-    let r = {data: null}; try { r = await apiGet(`${API_BASE}/${t}s`); } catch(e) {}
+    let r = {data: null}; try { r = await apiGet(`${t}s`); } catch(e) {}
     stats[t] = r.data ? Object.keys(r.data).length : 0;
   }
   let total = Object.values(stats).reduce((a,b)=>a+b,0);
@@ -124,7 +118,7 @@ async function renderDashboard(container) {
   html += '</div>';
 
   // 最近灵感
-  let ir = {data: null}; try { ir = await apiGet(`${API_BASE}/inspirations`); } catch(e) {}
+  let ir = {data: null}; try { ir = await apiGet('inspirations'); } catch(e) {}
   const sorted = Object.entries(ir.data||{}).sort((a,b)=>(b[1].updated_at||b[1].created_at||'').localeCompare(a[1].updated_at||a[1].created_at||'')).slice(0,5);
   if (sorted.length) {
     html += '<h3 style="margin:24px 0 12px">💡 最近的灵感</h3><div class="inspiration-board">';
@@ -165,7 +159,7 @@ async function renderGraph(container) {
     document.getElementById("vis-network").innerHTML = '<div class="empty-state" style="padding:60px 20px"><div class="icon">🕸️</div><p>图谱库加载失败，刷新重试或检查网络</p></div>';
     return;
   }
-  const gdata = await apiGet(`${API_BASE}/graph`);
+  const gdata = await apiGet('graph');
   if (!gdata.ok || !gdata.data) {
     container.innerHTML += '<p style="color:#64748b; padding:20px">暂无元素</p>';
     return;
@@ -210,7 +204,7 @@ async function renderListPage(container, collection) {
   const type = collection.replace(/s$/, '');
   const cfg = TYPES[type];
   container.innerHTML = '<div class="loading">加载中</div>';
-  const r = await apiGet(`${API_BASE}/${collection}`);
+  const r = await apiGet(collection);
   const items = r.data || {};
   let html = `<div class="page-header">
     <h2>${cfg.icon} ${cfg.label}</h2>
@@ -246,7 +240,7 @@ function openEditor(collection, id = null) {
   const cfg = TYPES[type];
 
   if (id) {
-    apiGet(`${API_BASE}/${collection}/${id}`).then(res => {
+    apiGet(`${collection}/${id}`).then(res => {
       const item = res.data || {};
       document.getElementById('modalTitle').textContent = `编辑${cfg.label}`;
       renderForm(type, item);
@@ -291,7 +285,7 @@ async function saveModal() {
   if (id) data._id = id;
   inputs.forEach(i => { data[i.name] = i.value; });
   try {
-    await apiPost(`${API_BASE}/save`, data);
+    await apiPost('save', data);
     closeModal();
     if (currentPage === 'graph') renderGraph(document.getElementById('page-content'));
     else navigateTo(currentPage);
@@ -302,7 +296,7 @@ async function deleteCurrentItem() {
   if (!editingItem||!editingItem.id) return;
   if (!confirm('确定删除？此操作不可撤销。')) return;
   try {
-    await apiPost(`${API_BASE}/delete`, { _collection: editingItem.collection, _id: editingItem.id });
+    await apiPost('delete', { _collection: editingItem.collection, _id: editingItem.id });
     closeModal();
     if (currentPage === 'graph') renderGraph(document.getElementById('page-content'));
     else navigateTo(currentPage);
@@ -315,7 +309,7 @@ async function doGlobalSearch() {
   if (!kw) return;
   const c = document.getElementById('page-content');
   c.innerHTML = '<div class="loading">搜索中</div>';
-  const r = await apiGet(`${API_BASE}/search?q=${encodeURIComponent(kw)}`);
+  const r = await apiGet('search', { q: kw });
   if (!r.ok||!r.data||!Object.keys(r.data).length) {
     c.innerHTML = `<div class="page-header"><h2>🔍 搜索结果</h2></div>
       <div class="empty-state"><div class="icon">🔍</div><p>未找到与「${esc(kw)}」相关的内容</p></div>`;
