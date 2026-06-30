@@ -3,7 +3,7 @@
  */
 
 // ===== API 基础路径 =====
-const API_BASE = "/api/plug/story_loom/api";
+const API_BASE = "/api/plugin/story_loom/api";
 
 // ===== 页面配置 =====
 const TYPES = {
